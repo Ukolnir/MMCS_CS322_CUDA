@@ -1,6 +1,5 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc.hpp>
 #include <iostream>
 
 using namespace cv;
@@ -73,7 +72,7 @@ int main(void)
 	CHECK(cudaMemset(cntColorCUDA, 0, sizeof(int)));
 
 	cudaEventRecord(startCUDA, 0);
-	cnt_Pixel << <(N / 256 + 255), 256 >> > (host_img, r, g, b, N, cntColorCUDA);
+	cnt_Pixel <<<((N + 511)/512), 512 >>> (host_img, r, g, b, N, cntColorCUDA);
 
 	cudaEventRecord(stopCUDA, 0);
 	cudaEventSynchronize(stopCUDA);
