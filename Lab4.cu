@@ -1,8 +1,8 @@
 #include <cmath>
 #include <iostream>
 
-#define N 27000
-#define M 1000
+#define N 25600
+#define M 1024
 
 using namespace std;
 
@@ -44,24 +44,40 @@ void compute(int* matrix, int n, int m, int* result) {
 
 bool checkResult(int* resultCPU, int* resultGPU, int n) {
 	for(int i = 0; i < N; ++i){
-		if(resultCPU[i] != resultGPU[i])
+		if(resultCPU[i] != resultGPU[i]){
+      cout << "Wrong in str: " << i << " inCPU: " << resultCPU[i] << " inGPU: " << resultGPU[i] << endl;
 			return false;
+    }
 	}
 	return true;
 }
 
-__global__ void computeCUDA(int* matrix, int n, int m, int* result)
+__global__ void fastComputeCUDA(int* matrix, int n, int m, int* result)
 {
-	int idxStr = threadIdx.x + blockIdx.x*blockDim.x;
+  int idxStr = threadIdx.x + blockIdx.x*blockDim.x;
 	if(idxStr >= n) return;
 	int res = 0;
   int temp0 = matrix[idxStr*m];
-	for(int i = 1; i < m; ++i){
-    int tempC = matrix[idxStr*m + i];
-		if(temp0 > tempC)
-			++res;
-    temp0 = tempC;
-	}
+
+  __shared__ int cache[256][33];
+  for(int k = 0; k < m/32; ++k){
+      //32 потока читают одну строчку
+      for(int s = 0; s < 256/8; ++s){
+        int row = threadIdx.x / 32 + s*8;
+        int col = k * 32 + threadIdx.x % 32;
+        cache[row][threadIdx.x % 32]
+        = matrix[(blockIdx.x*256 + row) * m + col];
+      }
+
+    __syncthreads();
+
+    for(int idx = 0; idx < 32; ++idx){
+      int tempC = cache[threadIdx.x][idx];
+  		if(temp0 > tempC)
+  			++res;
+      temp0 = tempC;
+  	}
+  }
 	result[idxStr] = res;
 }
 
@@ -95,7 +111,7 @@ int main(void) {
 	CHECK(cudaMalloc(&resultDEVICE, N * 4));
 
 	cudaEventRecord(startCUDA, 0);
-	computeCUDA <<<((N + 255)/256), 256, 40000 >>> (matrixDEVICE, N, M, resultDEVICE);
+	fastComputeCUDA <<<((N + 255)/256), 256 >>> (matrixDEVICE, N, M, resultDEVICE);
 	cudaEventRecord(stopCUDA, 0);
 	cudaEventSynchronize(stopCUDA);
 	CHECK(cudaGetLastError());
